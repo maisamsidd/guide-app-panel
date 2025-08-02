@@ -21,13 +21,25 @@ class DefaultFirebaseOptions {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return android;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for android - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.iOS:
-        return ios;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for ios - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -41,46 +53,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDuNht2HBplMRvF0Ovx222tj43CmHAKMrA',
-    appId: '1:487815781695:web:0b149ab0637fa0d9b0878a',
-    messagingSenderId: '487815781695',
-    projectId: 'guide-app-d44a4',
-    authDomain: 'guide-app-d44a4.firebaseapp.com',
-    storageBucket: 'guide-app-d44a4.firebasestorage.app',
+    apiKey: 'AIzaSyBnGNmjz5qVAvn_FYfRR_E0-eaZjqCKUQU',
+    appId: '1:1069589071133:web:90930606fefdf4f543cdf4',
+    messagingSenderId: '1069589071133',
+    projectId: 'chatapp-c7a7b',
+    authDomain: 'chatapp-c7a7b.firebaseapp.com',
+    storageBucket: 'chatapp-c7a7b.firebasestorage.app',
   );
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAivUL1mpNU3J2IFQH1Izj3Sv9TUs8FXo8',
-    appId: '1:487815781695:android:f17a749ae9f886d2b0878a',
-    messagingSenderId: '487815781695',
-    projectId: 'guide-app-d44a4',
-    storageBucket: 'guide-app-d44a4.firebasestorage.app',
-  );
-
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCwbLPf9a6PxzE5xw38vl_2XK7CDKesFek',
-    appId: '1:487815781695:ios:dfdfecb6d5f2bb9fb0878a',
-    messagingSenderId: '487815781695',
-    projectId: 'guide-app-d44a4',
-    storageBucket: 'guide-app-d44a4.firebasestorage.app',
-    iosBundleId: 'com.example.guideAppPanel',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCwbLPf9a6PxzE5xw38vl_2XK7CDKesFek',
-    appId: '1:487815781695:ios:dfdfecb6d5f2bb9fb0878a',
-    messagingSenderId: '487815781695',
-    projectId: 'guide-app-d44a4',
-    storageBucket: 'guide-app-d44a4.firebasestorage.app',
-    iosBundleId: 'com.example.guideAppPanel',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDuNht2HBplMRvF0Ovx222tj43CmHAKMrA',
-    appId: '1:487815781695:web:5a4220a7c819331fb0878a',
-    messagingSenderId: '487815781695',
-    projectId: 'guide-app-d44a4',
-    authDomain: 'guide-app-d44a4.firebaseapp.com',
-    storageBucket: 'guide-app-d44a4.firebasestorage.app',
-  );
 }
