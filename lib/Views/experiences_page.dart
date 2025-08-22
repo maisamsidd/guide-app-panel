@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
+import 'package:carousel_slider/carousel_slider.dart';
 import 'package:guide_app_panel/Models/category_model.dart';
 import 'package:guide_app_panel/Models/experience_model.dart';
 import 'package:guide_app_panel/Utils/theme.dart' show MyColors, MyStyles;
@@ -22,13 +22,11 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
   final StorageFileApi experienceImagesDB =
       Supabase.instance.client.storage.from('experience_images');
   List<Experience> experiences = [];
-  Uint8List? pickedImageBytes;
-  String? pickedImageName;
+  List<Uint8List> pickedImageBytesList = [];
+  List<String> pickedImageNames = [];
 
   final SupabaseQueryBuilder categoryDB =
       Supabase.instance.client.from('categories');
-  final StorageFileApi categoryImagesDB =
-      Supabase.instance.client.storage.from('category-images');
   List<Category> categories = [];
   bool isLoadingCategories = false;
 
@@ -42,10 +40,12 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
   Future<void> loadExperiences() async {
     try {
       final response = await experienceDB.select();
-      experiences = response.map((data) => Experience.fromMap(data)).toList();
-      setState(() {});
+      setState(() {
+        experiences = Experience.fromList(response);
+      });
     } catch (e) {
       print('Error fetching experiences: $e');
+      Get.snackbar('Error', 'Failed to load experiences');
     }
   }
 
@@ -55,10 +55,12 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
     });
     try {
       final response = await categoryDB.select();
-      categories = response.map((data) => Category.fromMap(data)).toList();
-      setState(() {});
+      setState(() {
+        categories = response.map((data) => Category.fromMap(data)).toList();
+      });
     } catch (e) {
       print('Error fetching categories: $e');
+      Get.snackbar('Error', 'Failed to load categories');
     } finally {
       setState(() {
         isLoadingCategories = false;
@@ -75,82 +77,110 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
     required double infantPrice,
   }) async {
     var id = DateTime.now().millisecondsSinceEpoch;
-    final String fileName = '$id.jpg';
 
     try {
-      await experienceImagesDB.uploadBinary(fileName, pickedImageBytes!);
-      final experience = {
-        'id': id,
-        'place': place,
-        'activity': activity,
-        'description': description,
-        'image_name': fileName,
-        'adult_price': adultPrice,
-        'kids_price': kidsPrice,
-        'infant_price': infantPrice
-      };
+      List<String> uploadedFileNames = [];
+      for (int i = 0; i < pickedImageBytesList.length; i++) {
+        final String fileName = '${id}_$i.jpg';
+        await experienceImagesDB.uploadBinary(
+            fileName, pickedImageBytesList[i]);
+        uploadedFileNames.add(fileName);
+      }
 
-      await experienceDB.insert(experience);
+      final experience = Experience(
+        id: id,
+        place: place,
+        activity: activity,
+        description: description,
+        imageName: uploadedFileNames,
+        sliderImageName: '',
+        adultPrice: adultPrice,
+        kidsPrice: kidsPrice,
+        infantPrice: infantPrice,
+      );
 
-      experiences.add(Experience(
-          id: id,
-          place: place,
-          activity: activity,
-          description: description,
-          imageName: fileName,
-          sliderImageName: "",
-          adultPrice: adultPrice,
-          kidsPrice: kidsPrice,
-          infantPrice: infantPrice));
+      await experienceDB.insert(experience.toMap());
 
-      pickedImageName = "";
-      pickedImageBytes = null;
-      print("Experience added successfully!");
+      setState(() {
+        experiences.add(experience);
+        pickedImageBytesList = [];
+        pickedImageNames = [];
+      });
+      Get.snackbar('Success', 'Experience added successfully');
     } catch (e) {
-      print("Error adding experience: $e");
+      print('Error adding experience: $e');
+      Get.snackbar('Error', 'Failed to add experience: $e');
     }
   }
 
-  Future<void> editExperience(
-      {required int index,
-      required String place,
-      required String activity,
-      required String description,
-      required double adultPrice,
-      required double kidsPrice,
-      required double infantPrice}) async {
+  Future<void> editExperience({
+    required int index,
+    required String place,
+    required String activity,
+    required String description,
+    required double adultPrice,
+    required double kidsPrice,
+    required double infantPrice,
+  }) async {
     var id = experiences[index].id;
-    final String fileName = '$id.jpg';
 
     try {
-      await experienceImagesDB.remove([fileName]);
-      await experienceImagesDB.uploadBinary(fileName, pickedImageBytes!);
-      final experience = {
-        'id': id,
-        'place': place,
-        'activity': activity,
-        'description': description,
-        'image_name': fileName,
-        'adult_price': adultPrice,
-        'kids_price': kidsPrice,
-        'infant_price': infantPrice
-      };
+      List<String> uploadedFileNames =
+          List.from(experiences[index].imageName); // Preserve existing images
+      if (pickedImageBytesList.isNotEmpty) {
+        // Remove old images only if new ones are selected
+        if (uploadedFileNames.isNotEmpty) {
+          await experienceImagesDB.remove(uploadedFileNames);
+        }
+        // Upload new images
+        uploadedFileNames = [];
+        for (int i = 0; i < pickedImageBytesList.length; i++) {
+          final String fileName = '${id}_$i.jpg';
+          await experienceImagesDB.uploadBinary(
+              fileName, pickedImageBytesList[i]);
+          uploadedFileNames.add(fileName);
+        }
+      }
 
-      await experienceDB.update(experience).eq('id', id);
+      final updatedExperience = experiences[index].copyWith(
+        place: place,
+        activity: activity,
+        description: description,
+        imageName: uploadedFileNames,
+        adultPrice: adultPrice,
+        kidsPrice: kidsPrice,
+        infantPrice: infantPrice,
+      );
 
-      experiences[index] = Experience(
-          id: id,
-          place: place,
-          activity: activity,
-          description: description,
-          imageName: fileName,
-          sliderImageName: experiences[index].sliderImageName,
-          adultPrice: adultPrice,
-          kidsPrice: kidsPrice,
-          infantPrice: infantPrice);
-      print("Experience updated successfully!");
+      await experienceDB.update(updatedExperience.toMap()).eq('id', id);
+
+      setState(() {
+        experiences[index] = updatedExperience;
+        pickedImageBytesList = [];
+        pickedImageNames = [];
+      });
+      Get.snackbar('Success', 'Experience updated successfully');
     } catch (e) {
-      print("Error adding experience: $e");
+      print('Error editing experience: $e');
+      Get.snackbar('Error', 'Failed to update experience: $e');
+    }
+  }
+
+  Future<void> _deleteExperience(int index) async {
+    try {
+      // Delete all images associated with the experience
+      if (experiences[index].imageName.isNotEmpty) {
+        await experienceImagesDB.remove(experiences[index].imageName);
+      }
+      await experienceDB.delete().eq('id', experiences[index].id);
+
+      setState(() {
+        experiences.removeAt(index);
+      });
+      Get.snackbar('Success', 'Experience deleted successfully');
+    } catch (e) {
+      print('Error deleting experience: $e');
+      Get.snackbar('Error', 'Failed to delete experience: $e');
     }
   }
 
@@ -162,32 +192,54 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
     TextEditingController adultPriceController = TextEditingController();
     String? selectedCategory;
 
+    // Initialize with existing data if editing
+    List<Uint8List> tempImageBytesList = [];
+    List<String> tempImageNames = [];
     if (index != null) {
       placeController.text = experiences[index].place;
       selectedCategory = experiences[index].activity;
       descriptionController.text = experiences[index].description;
-      kidsPriceController.text = experiences[index].kidsPrice.toString();
-      infantPriceController.text = experiences[index].infantPrice.toString();
-      adultPriceController.text = experiences[index].adultPrice.toString();
-      var imageUrl =
-          experienceImagesDB.getPublicUrl(experiences[index].imageName);
-      final response = await http.get(Uri.parse(imageUrl));
+      kidsPriceController.text =
+          experiences[index].kidsPrice?.toString() ?? '0.0';
+      infantPriceController.text =
+          experiences[index].infantPrice?.toString() ?? '0.0';
+      adultPriceController.text =
+          experiences[index].adultPrice?.toString() ?? '0.0';
 
-      if (response.statusCode == 200) {
-        pickedImageBytes = response.bodyBytes;
-      } else {
-        pickedImageBytes = null;
+      // Fetch existing images
+      for (String imageName in experiences[index].imageName) {
+        try {
+          final response = await http
+              .get(Uri.parse(experienceImagesDB.getPublicUrl(imageName)));
+          if (response.statusCode == 200) {
+            tempImageBytesList.add(response.bodyBytes);
+            tempImageNames.add(imageName);
+          } else {
+            print('Failed to fetch image $imageName: ${response.statusCode}');
+          }
+        } catch (e) {
+          print('Error fetching image $imageName: $e');
+        }
       }
     }
 
-    Future<void> pickImage() async {
+    // Initialize picked images with existing ones
+    setState(() {
+      pickedImageBytesList = List.from(tempImageBytesList);
+      pickedImageNames = List.from(tempImageNames);
+    });
+
+    Future<void> pickImages() async {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
         type: FileType.image,
       );
       if (result != null) {
         setState(() {
-          pickedImageBytes = result.files.first.bytes;
-          pickedImageName = result.files.first.name;
+          // Append new images instead of overwriting
+          pickedImageBytesList
+              .addAll(result.files.map((f) => f.bytes!).toList());
+          pickedImageNames.addAll(result.files.map((f) => f.name).toList());
         });
       }
     }
@@ -230,7 +282,7 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                 decoration: const InputDecoration(labelText: 'Description'),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    Get.snackbar("Error", "Please enter a description");
+                    return 'Please enter a description';
                   }
                   return null;
                 },
@@ -242,7 +294,7 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    Get.snackbar("Error", "Please enter a price");
+                    return 'Please enter a price';
                   }
                   return null;
                 },
@@ -254,7 +306,7 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    Get.snackbar("Error", "Please enter a price");
+                    return 'Please enter a price';
                   }
                   return null;
                 },
@@ -266,19 +318,53 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    Get.snackbar("Error", "Please enter a price");
+                    return 'Please enter a price';
                   }
                   return null;
                 },
               ),
-              pickedImageBytes == null
-                  ? const Text("No Image Selected")
-                  : Image.memory(pickedImageBytes!, height: 100, width: 100),
-              TextButton.icon(
-                onPressed: pickImage,
-                icon: Icon(Icons.image, color: MyColors.orangeColor),
-                label: Text("Pick Image", style: MyStyles.orangeText),
+              const SizedBox(height: 10),
+              pickedImageBytesList.isEmpty
+                  ? const Text("No Images Selected")
+                  : SizedBox(
+                      height: 100,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: pickedImageBytesList.length,
+                        itemBuilder: (ctx, i) => Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: Stack(
+                            children: [
+                              Image.memory(
+                                pickedImageBytesList[i],
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: IconButton(
+                                  icon: const Icon(Icons.remove_circle,
+                                      color: Colors.red),
+                                  onPressed: () {
+                                    setState(() {
+                                      pickedImageBytesList.removeAt(i);
+                                      pickedImageNames.removeAt(i);
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+              ElevatedButton(
+                onPressed: pickImages,
+                child: const Text("Add Images"),
               ),
+              const SizedBox(height: 10),
             ],
           ),
         ),
@@ -286,8 +372,8 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
           TextButton(
             onPressed: () {
               setState(() {
-                pickedImageBytes = null;
-                pickedImageName = "";
+                pickedImageBytesList = [];
+                pickedImageNames = [];
               });
               Navigator.pop(ctx);
             },
@@ -298,36 +384,42 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
               if (placeController.text.isNotEmpty &&
                   selectedCategory != null &&
                   descriptionController.text.isNotEmpty &&
-                  pickedImageBytes != null) {
-                var place = placeController.text;
-                var activity = selectedCategory!;
-                var description = descriptionController.text;
-                var kidsPrice =
+                  (index != null || pickedImageBytesList.isNotEmpty)) {
+                final place = placeController.text;
+                final activity = selectedCategory!;
+                final description = descriptionController.text;
+                final kidsPrice =
                     double.tryParse(kidsPriceController.text) ?? 0.0;
-                var infantPrice =
+                final infantPrice =
                     double.tryParse(infantPriceController.text) ?? 0.0;
-                var adultPrice =
+                final adultPrice =
                     double.tryParse(adultPriceController.text) ?? 0.0;
+
                 if (index == null) {
                   await addExperience(
-                      place: place,
-                      activity: activity,
-                      description: description,
-                      kidsPrice: kidsPrice,
-                      infantPrice: infantPrice,
-                      adultPrice: adultPrice);
+                    place: place,
+                    activity: activity,
+                    description: description,
+                    adultPrice: adultPrice,
+                    kidsPrice: kidsPrice,
+                    infantPrice: infantPrice,
+                  );
                 } else {
                   await editExperience(
-                      index: index,
-                      place: place,
-                      activity: activity,
-                      description: description,
-                      kidsPrice: kidsPrice,
-                      infantPrice: infantPrice,
-                      adultPrice: adultPrice);
+                    index: index,
+                    place: place,
+                    activity: activity,
+                    description: description,
+                    adultPrice: adultPrice,
+                    kidsPrice: kidsPrice,
+                    infantPrice: infantPrice,
+                  );
                 }
-                setState(() {});
+                await loadExperiences(); // Refresh the list
                 Navigator.pop(ctx);
+              } else {
+                Get.snackbar('Error',
+                    'Please fill all fields${index == null ? ' and select at least one image' : ''}');
               }
             },
             child: Text(index == null ? "Add" : "Update",
@@ -338,108 +430,24 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
     );
   }
 
-  Future<void> _deleteExperience(int index) async {
-    try {
-      await experienceImagesDB.remove([experiences[index].imageName]);
-      await experienceDB.delete().eq('id', experiences[index].id);
-
-      setState(() {
-        experiences.removeAt(index);
-      });
-    } catch (e) {
-      print("Error deleting experience: $e");
-    }
-  }
-
   Future<void> addSliderImage(Uint8List sliderImage, int index) async {
     try {
       String fileName =
           "${DateTime.now().millisecondsSinceEpoch.toString()}.jpg";
       await experienceImagesDB.uploadBinary(fileName, sliderImage);
+      await experienceDB.update({'slider_image_name': fileName}).eq(
+          'id', experiences[index].id);
 
-      var id = experiences[index].id;
-      await experienceDB.update({'slider_image_name': fileName}).eq('id', id);
-      print("Slider image added successfully!");
+      setState(() {
+        experiences[index] =
+            experiences[index].copyWith(sliderImageName: fileName);
+      });
+      Get.snackbar('Success', 'Slider image added successfully');
     } catch (e) {
-      print("Error adding slider image: $e");
+      print('Error adding slider image: $e');
+      Get.snackbar('Error', 'Failed to add slider image: $e');
     }
   }
-
-  // Future<void> _addToSlider(int index) async {
-  //   String place = experiences[index].place;
-  //   String activity = experiences[index].activity;
-  //   String description = experiences[index].description;
-  //   String kidsPrice = experiences[index].kidsPrice.toString();
-  //   String infantPrice = experiences[index].infantPrice.toString();
-  //   String adultPrice = experiences[index].adultPrice.toString();
-  //   Uint8List? sliderImage;
-
-  //   Future<void> pickSliderImage() async {
-  //     FilePickerResult? result = await FilePicker.platform.pickFiles(
-  //       type: FileType.image,
-  //     );
-  //     if (result != null) {
-  //       setState(() {
-  //         sliderImage = result.files.first.bytes;
-  //       });
-  //     }
-  //   }
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (ctx) => AlertDialog(
-  //       title: const Text("Add to Slider"),
-  //       content: SingleChildScrollView(
-  //         child: Column(
-  //           mainAxisSize: MainAxisSize.min,
-  //           crossAxisAlignment: CrossAxisAlignment.start,
-  //           children: [
-  //             Text("Place: $place"),
-  //             const SizedBox(height: 8),
-  //             Text("Activity: $activity"),
-  //             const SizedBox(height: 8),
-  //             Text("Description: $description"),
-  //             const SizedBox(height: 8),
-  //             Text("Kids Price: $kidsPrice"),
-  //             const SizedBox(height: 10),
-  //             Text("Infant Price: $infantPrice"),
-  //             const SizedBox(height: 10),
-  //             Text("Adult Price: $adultPrice"),
-  //             const SizedBox(height: 10),
-  //             sliderImage == null
-  //                 ? const Center(child: Text("No Image Selected"))
-  //                 : Center(
-  //                     child:
-  //                         Image.memory(sliderImage!, height: 100, width: 100)),
-  //             Center(
-  //               child: TextButton.icon(
-  //                 onPressed: pickSliderImage,
-  //                 icon: Icon(Icons.image, color: MyColors.orangeColor),
-  //                 label: Text("Pick Image", style: MyStyles.orangeText),
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(ctx),
-  //           child: Text("Cancel", style: MyStyles.orangeText),
-  //         ),
-  //         ElevatedButton(
-  //           onPressed: () {
-  //             if (sliderImage != null) {
-  //               addSliderImage(sliderImage!, index);
-  //             }
-  //             setState(() {});
-  //             Navigator.pop(ctx);
-  //           },
-  //           child: Text("Add to Slider", style: MyStyles.orangeText),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -450,10 +458,11 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
         title: const Text('Experiences'),
         actions: [
           ElevatedButton.icon(
-              onPressed: () => _showExperienceDialog(),
-              icon: Icon(Icons.add, color: MyColors.orangeColor),
-              label: const Text("Add Experience"),
-              style: MyStyles.appBarButtonStyle),
+            onPressed: () => _showExperienceDialog(),
+            icon: Icon(Icons.add, color: MyColors.orangeColor),
+            label: const Text("Add Experience"),
+            style: MyStyles.appBarButtonStyle,
+          ),
           const SizedBox(width: 16),
         ],
       ),
@@ -474,15 +483,38 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
-                          child: Image.network(
-                            experienceImagesDB
-                                .getPublicUrl(experiences[index].imageName),
-                            width: 160,
-                            height: 120,
-                            fit: BoxFit.contain,
-                          ),
+                        SizedBox(
+                          height: 120,
+                          width: 160,
+                          child: experiences[index].imageName.isEmpty
+                              ? const Center(child: Text("No Images"))
+                              : CarouselSlider(
+                                  options: CarouselOptions(
+                                    height: 120,
+                                    autoPlay: true,
+                                    autoPlayInterval:
+                                        const Duration(seconds: 3),
+                                    enlargeCenterPage: true,
+                                    viewportFraction: 1.0,
+                                  ),
+                                  items: experiences[index]
+                                      .imageName
+                                      .map((imageName) {
+                                    return ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.network(
+                                        experienceImagesDB
+                                            .getPublicUrl(imageName),
+                                        width: 140,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(Icons.error),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -506,21 +538,21 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                "\$${experiences[index].kidsPrice}",
+                                "\$${experiences[index].kidsPrice?.toStringAsFixed(2) ?? '0.00'}",
                                 style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.green),
                               ),
                               Text(
-                                "\$${experiences[index].infantPrice}",
+                                "\$${experiences[index].infantPrice?.toStringAsFixed(2) ?? '0.00'}",
                                 style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.green),
                               ),
                               Text(
-                                "\$${experiences[index].adultPrice}",
+                                "\$${experiences[index].adultPrice?.toStringAsFixed(2) ?? '0.00'}",
                                 style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -530,13 +562,9 @@ class _ExperiencesPageState extends State<ExperiencesPage> {
                           ),
                         ),
                         // IconButton(
-                        //   icon: const Icon(Icons.add, color: Colors.blue),
-                        //   onPressed: () => _addToSlider(index),
+                        //   icon: const Icon(Icons.edit, color: Colors.blue),
+                        //   onPressed: () => _showExperienceDialog(index: index),
                         // ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _showExperienceDialog(index: index),
-                        ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () => _deleteExperience(index),
